@@ -162,7 +162,9 @@ class VoiceMonitorBot {
                     rejoinWindowMinutes: 20,
                     weeklyReportEnabled: true,
                     weeklyReportDay: 0,
-                    weeklyReportHour: 9
+                    weeklyReportHour: 9,
+                    antiCheatEnabled: true,
+                    minUsersInChannel: 2
                 };
                 
                 await this.prisma.serverConfig.create({
@@ -317,15 +319,53 @@ class VoiceMonitorBot {
                 return channel && config.excludedChannelIds && config.excludedChannelIds.includes(channel.id);
             };
             
+            const meetsMinUserRequirement = (channel) => {
+                if (!config.antiCheatEnabled || !config.minUsersInChannel) return true;
+                const nonBotMembers = channel.members.filter(m => !m.user.bot).size;
+                return nonBotMembers >= config.minUsersInChannel;
+            };
+            
+            const isDeafened = newState.selfDeaf || newState.serverDeaf;
+            const wasDeafened = oldState.selfDeaf || oldState.serverDeaf;
+            
+            if (oldState.channel && newState.channel && oldState.channel.id === newState.channel.id) {
+                if (!wasDeafened && isDeafened) {
+                    this.logger.voice('deafened', member, newState.guild);
+                    await this.sessionManager.pauseSession(guildId, userId, 'deafened');
+                    return;
+                } else if (wasDeafened && !isDeafened) {
+                    if (!isExcluded(newState.channel) && meetsMinUserRequirement(newState.channel)) {
+                        this.logger.voice('undeafened', member, newState.guild);
+                        await this.sessionManager.resumeSession(guildId, userId, displayName);
+                    }
+                    return;
+                }
+                
+                if (oldState.selfMute !== newState.selfMute) {
+                    await this.sessionManager.updateMuteStatus(guildId, userId, newState.selfMute);
+                }
+                return;
+            }
+            
             if (!oldState.channel && newState.channel && !isExcluded(newState.channel)) {
+                if (!meetsMinUserRequirement(newState.channel)) {
+                    this.logger.voice('joined but not enough users', member, newState.guild);
+                    return;
+                }
+                
+                if (isDeafened) {
+                    this.logger.voice('joined but deafened', member, newState.guild);
+                    return;
+                }
+                
                 this.logger.voice('joined', member, newState.guild);
                 
                 const recentSession = await this.sessionManager.getRecentSession(guildId, userId);
                 if (recentSession) {
-                    await this.sessionManager.resumeSession(guildId, userId, displayName, recentSession.totalTime);
+                    await this.sessionManager.resumeSession(guildId, userId, displayName);
                     await this.sessionManager.removeCompletedSession(guildId, recentSession);
                 } else {
-                    await this.sessionManager.startSession(guildId, userId, displayName);
+                    await this.sessionManager.startSession(guildId, userId, displayName, newState.selfMute);
                 }
             }
             else if ((oldState.channel && !newState.channel) || (!isExcluded(oldState.channel) && isExcluded(newState.channel))) {
@@ -333,14 +373,36 @@ class VoiceMonitorBot {
                 await this.sessionManager.endSession(guildId, userId);
             }
             else if (isExcluded(oldState.channel) && newState.channel && !isExcluded(newState.channel)) {
+                if (!meetsMinUserRequirement(newState.channel)) {
+                    this.logger.voice('moved but not enough users', member, newState.guild);
+                    return;
+                }
+                
+                if (isDeafened) {
+                    this.logger.voice('moved but deafened', member, newState.guild);
+                    return;
+                }
+                
                 this.logger.voice('moved from excluded to tracked channel', member, newState.guild);
                 
                 const recentSession = await this.sessionManager.getRecentSession(guildId, userId);
                 if (recentSession) {
-                    await this.sessionManager.resumeSession(guildId, userId, displayName, recentSession.totalTime);
+                    await this.sessionManager.resumeSession(guildId, userId, displayName);
                     await this.sessionManager.removeCompletedSession(guildId, recentSession);
                 } else {
-                    await this.sessionManager.startSession(guildId, userId, displayName);
+                    await this.sessionManager.startSession(guildId, userId, displayName, newState.selfMute);
+                }
+            }
+            
+            if (oldState.channel && config.antiCheatEnabled && config.minUsersInChannel) {
+                const nonBotMembers = oldState.channel.members.filter(m => !m.user.bot).size;
+                if (nonBotMembers < config.minUsersInChannel) {
+                    for (const [memberId, channelMember] of oldState.channel.members) {
+                        if (!channelMember.user.bot && memberId !== userId) {
+                            await this.sessionManager.endSession(guildId, memberId);
+                            this.logger.voice('ended due to insufficient users', channelMember, newState.guild);
+                        }
+                    }
                 }
             }
         } catch (error) {
@@ -368,6 +430,7 @@ class VoiceMonitorBot {
             if (!trackingRole) return;
             
             const activeSessionKeys = await this.redis.keys(`voice:${guild.id}:active:*`);
+            const pausedSessionKeys = await this.redis.keys(`voice:${guild.id}:paused:*`);
             
             for (const key of activeSessionKeys) {
                 const sessionData = await this.redis.get(key);
@@ -382,10 +445,31 @@ class VoiceMonitorBot {
                 const isExcluded = member?.voice.channel && 
                                   config.excludedChannelIds && 
                                   config.excludedChannelIds.includes(member.voice.channel.id);
+                const isDeafened = member && (member.voice.selfDeaf || member.voice.serverDeaf);
                 
-                if (!isInVoice || isExcluded) {
+                const channelMemberCount = member?.voice.channel 
+                    ? member.voice.channel.members.filter(m => !m.user.bot).size 
+                    : 0;
+                const meetsMinUsers = !config.antiCheatEnabled || 
+                                    !config.minUsersInChannel || 
+                                    channelMemberCount >= config.minUsersInChannel;
+                
+                if (!isInVoice || isExcluded || isDeafened || !meetsMinUsers) {
                     await this.sessionManager.endSession(guild.id, session.userId);
                     this.logger.info(`Ended stale session for ${session.displayName}`, { guild });
+                }
+            }
+            
+            for (const key of pausedSessionKeys) {
+                const sessionData = await this.redis.get(key);
+                if (!sessionData) continue;
+                
+                const session = JSON.parse(sessionData);
+                const member = await guild.members.fetch(session.userId).catch(() => null);
+                
+                if (!member || !member.voice.channel) {
+                    await this.redis.del(key);
+                    this.logger.info(`Cleaned up paused session for ${session.displayName}`, { guild });
                 }
             }
             
@@ -395,14 +479,23 @@ class VoiceMonitorBot {
                         continue;
                     }
                     
+                    const nonBotMembers = channel.members.filter(m => !m.user.bot).size;
+                    if (config.antiCheatEnabled && config.minUsersInChannel && nonBotMembers < config.minUsersInChannel) {
+                        continue;
+                    }
+                    
                     for (const [memberId, member] of channel.members) {
-                        if (!member.user.bot && member.roles.cache.has(trackingRole.id)) {
+                        if (!member.user.bot && 
+                            member.roles.cache.has(trackingRole.id) && 
+                            !member.voice.selfDeaf && 
+                            !member.voice.serverDeaf) {
                             const existingSession = await this.redis.get(`voice:${guild.id}:active:${memberId}`);
                             if (!existingSession) {
                                 await this.sessionManager.startSession(
                                     guild.id,
                                     memberId,
-                                    member.displayName || member.user.username
+                                    member.displayName || member.user.username,
+                                    member.voice.selfMute
                                 );
                                 this.logger.info(`Started session for ${member.displayName}`, { guild });
                             }
@@ -494,6 +587,7 @@ class VoiceMonitorBot {
         });
         
         const userActivity = new Map();
+        const userMuteStats = new Map();
         
         const completedSessions = await this.redis.zrangebyscore(
             `voice:${guild.id}:completed`,
@@ -506,6 +600,13 @@ class VoiceMonitorBot {
             if (trackedMembers.has(session.userId)) {
                 const current = userActivity.get(session.userId) || 0;
                 userActivity.set(session.userId, current + session.totalTime);
+                
+                if (!userMuteStats.has(session.userId)) {
+                    userMuteStats.set(session.userId, { mutedTime: 0, totalTime: 0 });
+                }
+                const muteStats = userMuteStats.get(session.userId);
+                muteStats.mutedTime += session.mutedTime || 0;
+                muteStats.totalTime += session.totalTime;
             }
         }
         
@@ -518,18 +619,37 @@ class VoiceMonitorBot {
             
             const session = JSON.parse(sessionData);
             if (trackedMembers.has(session.userId)) {
-                const totalTime = now - session.startTime + session.totalTime;
+                const totalTime = now - session.startTime + (session.totalTime || 0);
                 const current = userActivity.get(session.userId) || 0;
                 userActivity.set(session.userId, current + totalTime);
+                
+                if (!userMuteStats.has(session.userId)) {
+                    userMuteStats.set(session.userId, { mutedTime: 0, totalTime: 0 });
+                }
+                const muteStats = userMuteStats.get(session.userId);
+                
+                const timeSinceLastCheck = now - session.lastMuteCheck;
+                const currentMutedTime = (session.mutedTime || 0) + (session.isMuted ? timeSinceLastCheck : 0);
+                
+                muteStats.mutedTime += currentMutedTime;
+                muteStats.totalTime += totalTime;
             }
         }
         
         const activeUsers = Array.from(userActivity.entries())
-            .map(([userId, time]) => ({
-                displayName: trackedMembers.get(userId),
-                time: this.formatDuration(time),
-                rawTime: time
-            }))
+            .map(([userId, time]) => {
+                const muteStats = userMuteStats.get(userId) || { mutedTime: 0, totalTime: time };
+                const mutePercentage = muteStats.totalTime > 0 
+                    ? Math.round((muteStats.mutedTime / muteStats.totalTime) * 100)
+                    : 0;
+                
+                return {
+                    displayName: trackedMembers.get(userId),
+                    time: this.formatDuration(time),
+                    rawTime: time,
+                    mutePercentage
+                };
+            })
             .sort((a, b) => b.rawTime - a.rawTime);
         
         const inactiveUsers = Array.from(trackedMembers.entries())
@@ -556,6 +676,16 @@ class VoiceMonitorBot {
             .setFooter({ text: dateRangeText })
             .setThumbnail(guild.iconURL());
         
+        if (config.antiCheatEnabled) {
+            embed.addFields({
+                name: '🛡️ Anti-Cheat Status',
+                value: `**Min Users Required:** ${config.minUsersInChannel || 2}\n` +
+                       `**Deafened Detection:** Enabled\n` +
+                       `**Mute Tracking:** Enabled`,
+                inline: false
+            });
+        }
+        
         embed.addFields({
             name: '📈 Statistics',
             value: `**Active Users:** ${activeUsers.length} (${activityRate}%)\n` +
@@ -573,7 +703,9 @@ class VoiceMonitorBot {
         if (activeUsers.length > 0) {
             let activeList = '';
             activeUsers.forEach((u) => {
-                activeList += `${u.displayName} ─ \`${u.time}\`\n`;
+                const muteIndicator = u.mutePercentage > 80 ? ' 🔇' : '';
+                const muteInfo = u.mutePercentage > 0 ? ` (${u.mutePercentage}% muted)${muteIndicator}` : '';
+                activeList += `${u.displayName} ─ \`${u.time}\`${muteInfo}\n`;
             });
             
             const chunks = [];

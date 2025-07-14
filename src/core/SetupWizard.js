@@ -10,13 +10,13 @@ class SetupWizard {
             'commandPermissions',
             'excludedChannels',
             'sessionSettings',
+            'antiCheat',
             'weeklyReports',
             'timezone',
             'review'
         ];
         
         this.timezones = [
-            // Americas
             { label: 'UTC (Coordinated Universal Time)', value: 'UTC' },
             { label: 'US/Eastern - New York, Miami', value: 'America/New_York' },
             { label: 'US/Central - Chicago, Houston', value: 'America/Chicago' },
@@ -29,7 +29,6 @@ class SetupWizard {
             { label: 'Mexico/Central - Mexico City', value: 'America/Mexico_City' },
             { label: 'Brazil/Brasilia', value: 'America/Sao_Paulo' },
             { label: 'Argentina - Buenos Aires', value: 'America/Argentina/Buenos_Aires' },
-            // Europe
             { label: 'Europe/London', value: 'Europe/London' },
             { label: 'Europe/Berlin, Paris, Rome', value: 'Europe/Berlin' },
             { label: 'Europe/Athens, Helsinki', value: 'Europe/Athens' },
@@ -38,7 +37,6 @@ class SetupWizard {
             { label: 'Europe/Oslo', value: 'Europe/Oslo' },
             { label: 'Europe/Copenhagen', value: 'Europe/Copenhagen' },
             { label: 'Europe/Belgrade', value: 'Europe/Belgrade' },
-            // Asia
             { label: 'Asia/Dubai', value: 'Asia/Dubai' },
             { label: 'Asia/Karachi', value: 'Asia/Karachi' },
             { label: 'Asia/Kolkata (India)', value: 'Asia/Kolkata' },
@@ -49,12 +47,10 @@ class SetupWizard {
             { label: 'Asia/Shanghai, Beijing', value: 'Asia/Shanghai' },
             { label: 'Asia/Tokyo', value: 'Asia/Tokyo' },
             { label: 'Asia/Seoul', value: 'Asia/Seoul' },
-            // Pacific
             { label: 'Australia/Sydney', value: 'Australia/Sydney' },
             { label: 'Australia/Melbourne', value: 'Australia/Melbourne' },
             { label: 'Australia/Perth', value: 'Australia/Perth' },
             { label: 'Pacific/Auckland', value: 'Pacific/Auckland' },
-            // Africa
             { label: 'Africa/Cairo', value: 'Africa/Cairo' },
             { label: 'Africa/Johannesburg', value: 'Africa/Johannesburg' },
             { label: 'Africa/Lagos', value: 'Africa/Lagos' }
@@ -110,6 +106,9 @@ class SetupWizard {
             case 'session':
                 await this.handleSessionSettings(interaction, state);
                 break;
+            case 'anticheat':
+                await this.handleAntiCheat(interaction, state);
+                break;
             case 'weekly':
                 await this.handleWeeklyReports(interaction, state);
                 break;
@@ -132,7 +131,7 @@ class SetupWizard {
             .setTitle('Step 1: Tracking Role')
             .setDescription('Select the role that identifies members whose voice activity should be tracked.')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 1 of 8' });
+            .setFooter({ text: 'Step 1 of 9' });
         
         const row = new ActionRowBuilder()
             .addComponents(
@@ -174,7 +173,7 @@ class SetupWizard {
             .setTitle('Step 2: Report Recipients')
             .setDescription('Choose where voice activity reports should be sent.\nYou can select multiple channels and users.')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 2 of 8' });
+            .setFooter({ text: 'Step 2 of 9' });
         
         if (state.config.reportRecipients && state.config.reportRecipients.length > 0) {
             const recipients = state.config.reportRecipients.map(r => {
@@ -255,7 +254,7 @@ class SetupWizard {
             .setTitle('Step 3: Command Permissions')
             .setDescription('Configure who can use bot commands and where.')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 3 of 8' });
+            .setFooter({ text: 'Step 3 of 9' });
         
         const roleRow = new ActionRowBuilder()
             .addComponents(
@@ -323,7 +322,7 @@ class SetupWizard {
             .setTitle('Step 4: Excluded Voice Channels')
             .setDescription('Select voice channels where activity should NOT be tracked.\n(e.g., AFK channels, music channels)')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 4 of 8' });
+            .setFooter({ text: 'Step 4 of 9' });
         
         const row = new ActionRowBuilder()
             .addComponents(
@@ -380,7 +379,7 @@ class SetupWizard {
             .setTitle('Step 5: Session Settings')
             .setDescription('Configure how voice sessions are tracked.')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 5 of 8' });
+            .setFooter({ text: 'Step 5 of 9' });
         
         embed.addFields(
             { 
@@ -458,7 +457,7 @@ class SetupWizard {
             state.config.minSessionMinutes = state.config.minSessionMinutes || 20;
             state.config.rejoinWindowMinutes = state.config.rejoinWindowMinutes || 20;
             await this.saveState(state);
-            await this.showWeeklyReports(interaction, state);
+            await this.showAntiCheat(interaction, state);
             return;
         }
         
@@ -466,15 +465,86 @@ class SetupWizard {
         await interaction.deferUpdate();
     }
 
-    async showWeeklyReports(interaction, state) {
+    async showAntiCheat(interaction, state) {
         state.step = 6;
         await this.saveState(state);
         
         const embed = new EmbedBuilder()
-            .setTitle('Step 6: Weekly Reports')
+            .setTitle('Step 6: Anti-Cheat Settings')
+            .setDescription('Configure anti-cheat measures to prevent voice activity abuse.')
+            .setColor(0x0099FF)
+            .setFooter({ text: 'Step 6 of 9' });
+        
+        embed.addFields(
+            { 
+                name: '🛡️ Available Features', 
+                value: '• **Minimum Users:** Require at least 2 people in voice channel\n' +
+                       '• **Deafened Detection:** Pause tracking when users are deafened\n' +
+                       '• **Mute Tracking:** Track percentage of time spent muted',
+                inline: false 
+            }
+        );
+        
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId(`setup_anticheat_toggle_${interaction.guildId}`)
+                    .setPlaceholder('Enable or disable anti-cheat')
+                    .addOptions([
+                        { 
+                            label: 'Enable Anti-Cheat (Recommended)', 
+                            value: 'enable',
+                            description: 'Activates all anti-cheat features',
+                        },
+                        { 
+                            label: 'Disable Anti-Cheat', 
+                            value: 'disable',
+                            description: 'No restrictions on voice tracking',
+                        }
+                    ])
+            );
+        
+        const buttonRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`setup_back_${interaction.guildId}`)
+                    .setLabel('Back')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId(`setup_cancel_${interaction.guildId}`)
+                    .setLabel('Cancel')
+                    .setStyle(ButtonStyle.Danger)
+            );
+        
+        await interaction.update({ 
+            embeds: [embed], 
+            components: [row, buttonRow] 
+        });
+    }
+
+    async handleAntiCheat(interaction, state) {
+        const type = interaction.customId.split('_')[2];
+        
+        if (type === 'toggle') {
+            const enabled = interaction.values[0] === 'enable';
+            state.config.antiCheatEnabled = enabled;
+            if (enabled) {
+                state.config.minUsersInChannel = 2;
+            }
+            await this.saveState(state);
+            await this.showWeeklyReports(interaction, state);
+        }
+    }
+
+    async showWeeklyReports(interaction, state) {
+        state.step = 7;
+        await this.saveState(state);
+        
+        const embed = new EmbedBuilder()
+            .setTitle('Step 7: Weekly Reports')
             .setDescription('Configure automatic weekly voice activity reports.')
             .setColor(0x0099FF)
-            .setFooter({ text: 'Step 6 of 8' });
+            .setFooter({ text: 'Step 7 of 9' });
         
         const row = new ActionRowBuilder()
             .addComponents(
@@ -522,16 +592,16 @@ class SetupWizard {
     }
 
     async showTimezone(interaction, state) {
-        state.step = 7;
+        state.step = 8;
         state.timezonePage = state.timezonePage || 0;
         await this.saveState(state);
         
         const embed = new EmbedBuilder()
-            .setTitle('Step 7: Server Timezone')
+            .setTitle('Step 8: Server Timezone')
             .setDescription('Select your server\'s timezone for accurate report scheduling.\n\n' +
                 '**Note:** These timezones automatically handle daylight saving time changes.')
             .setColor(0x0099FF)
-            .setFooter({ text: `Step 7 of 8 • Page ${state.timezonePage + 1}/${this.timezonePages.length}` });
+            .setFooter({ text: `Step 8 of 9 • Page ${state.timezonePage + 1}/${this.timezonePages.length}` });
         
         const currentTime = new Date().toLocaleTimeString('en-US', { 
             timeZone: 'UTC',
@@ -596,15 +666,15 @@ class SetupWizard {
     }
 
     async showReview(interaction, state) {
-        state.step = 8;
+        state.step = 9;
         await this.saveState(state);
         
         const config = state.config;
         const embed = new EmbedBuilder()
-            .setTitle('Step 8: Review Configuration')
+            .setTitle('Step 9: Review Configuration')
             .setDescription('Please review your settings before confirming.')
             .setColor(0x00FF88)
-            .setFooter({ text: 'Step 8 of 8' });
+            .setFooter({ text: 'Step 9 of 9' });
         
         const trackingRole = config.trackingRoleId ? `<@&${config.trackingRoleId}>` : 'Not set';
         const commandRole = config.commandRoleId ? `<@&${config.commandRoleId}>` : 'Admin only';
@@ -626,6 +696,7 @@ class SetupWizard {
             { name: '🚫 Excluded Channels', value: excluded },
             { name: '⏱️ Min Session', value: `${config.minSessionMinutes || 20} minutes` },
             { name: '🔄 Rejoin Window', value: `${config.rejoinWindowMinutes || 20} minutes` },
+            { name: '🛡️ Anti-Cheat', value: config.antiCheatEnabled ? 'Enabled' : 'Disabled' },
             { name: '📅 Weekly Reports', value: config.weeklyReportEnabled ? 'Enabled' : 'Disabled' },
             { name: '🌍 Timezone', value: config.timezone || 'UTC' }
         );
@@ -671,6 +742,8 @@ class SetupWizard {
             excludedChannelIds: config.excludedChannelIds || [],
             minSessionMinutes: config.minSessionMinutes || 20,
             rejoinWindowMinutes: config.rejoinWindowMinutes || 20,
+            antiCheatEnabled: config.antiCheatEnabled !== undefined ? config.antiCheatEnabled : true,
+            minUsersInChannel: config.antiCheatEnabled ? (config.minUsersInChannel || 2) : 1,
             weeklyReportEnabled: config.weeklyReportEnabled !== undefined ? config.weeklyReportEnabled : true,
             weeklyReportDay: 0,
             weeklyReportHour: 9,
@@ -701,7 +774,7 @@ class SetupWizard {
         }
         
         const embed = new EmbedBuilder()
-            .setTitle('✅ Setup Complete!')
+            .setTitle('✅ Setup Complete')
             .setDescription('Your bot configuration has been saved.')
             .setColor(0x00FF88)
             .addFields(
@@ -728,9 +801,10 @@ class SetupWizard {
             3: () => this.showCommandPermissions(interaction, state),
             4: () => this.showExcludedChannels(interaction, state),
             5: () => this.showSessionSettings(interaction, state),
-            6: () => this.showWeeklyReports(interaction, state),
-            7: () => this.showTimezone(interaction, state),
-            8: () => this.showReview(interaction, state)
+            6: () => this.showAntiCheat(interaction, state),
+            7: () => this.showWeeklyReports(interaction, state),
+            8: () => this.showTimezone(interaction, state),
+            9: () => this.showReview(interaction, state)
         };
         
         if (state.step > 1) {

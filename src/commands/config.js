@@ -97,6 +97,15 @@ module.exports = {
             inline: false
         });
         
+        embed.addFields({
+            name: '🛡️ Anti-Cheat Settings',
+            value: `**Status:** ${config.antiCheatEnabled ? 'Enabled' : 'Disabled'}\n` +
+                   `**Min Users in Channel:** ${config.antiCheatEnabled ? (config.minUsersInChannel || 2) : 'N/A'}\n` +
+                   `**Deafened Detection:** ${config.antiCheatEnabled ? 'Enabled' : 'Disabled'}\n` +
+                   `**Mute Tracking:** ${config.antiCheatEnabled ? 'Enabled' : 'Disabled'}`,
+            inline: false
+        });
+        
         const reportChannels = config.reportRecipients
             .filter(r => r.startsWith('c:'))
             .map(r => `<#${r.substring(2)}>`);
@@ -110,7 +119,8 @@ module.exports = {
                    `**Users:** ${reportUsers.length > 0 ? reportUsers.join(', ') : 'None'}\n` +
                    `**Weekly Reports:** ${config.weeklyReportEnabled ? 'Enabled' : 'Disabled'}\n` +
                    `**Report Day:** ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][config.weeklyReportDay]}\n` +
-                   `**Report Time:** ${config.weeklyReportHour}:00`,
+                   `**Report Time:** ${config.weeklyReportHour}:00\n` +
+                   `**Timezone:** ${config.timezone || 'UTC'}`,
             inline: false
         });
         
@@ -175,9 +185,12 @@ module.exports = {
                         excludedChannelIds: [],
                         minSessionMinutes: 20,
                         rejoinWindowMinutes: 20,
+                        antiCheatEnabled: true,
+                        minUsersInChannel: 2,
                         weeklyReportEnabled: true,
                         weeklyReportDay: 0,
-                        weeklyReportHour: 9
+                        weeklyReportHour: 9,
+                        timezone: 'UTC'
                     }
                 });
                 
