@@ -93,6 +93,32 @@ class CommandHandler {
                 }
                 return;
             }
+            
+            if (interaction.isStringSelectMenu() && interaction.customId.startsWith('devaudit_')) {
+                const devauditCommand = this.devCommands.get('devaudit');
+                if (devauditCommand && devauditCommand.handleSelectMenu) {
+                    try {
+                        await devauditCommand.handleSelectMenu(interaction, this.client);
+                    } catch (error) {
+                        this.client.logger.error('Error in devaudit handleSelectMenu', error);
+                        await this.handleInteractionError(interaction, error);
+                    }
+                }
+                return;
+            }
+            
+            if (interaction.isStringSelectMenu() && interaction.customId.startsWith('devreport_')) {
+                const devreportCommand = this.devCommands.get('devreport');
+                if (devreportCommand && devreportCommand.handleSelectMenu) {
+                    try {
+                        await devreportCommand.handleSelectMenu(interaction, this.client);
+                    } catch (error) {
+                        this.client.logger.error('Error in devreport handleSelectMenu', error);
+                        await this.handleInteractionError(interaction, error);
+                    }
+                }
+                return;
+            }
         }
         
         if (!interaction.isChatInputCommand()) return;
@@ -116,6 +142,25 @@ class CommandHandler {
             } else {
                 await interaction.reply({ content: errorMessage, flags: MessageFlags.Ephemeral });
             }
+        }
+    }
+
+    async handleInteractionError(interaction, error) {
+        try {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({
+                    content: '❌ An error occurred while processing your selection.',
+                    flags: MessageFlags.Ephemeral
+                });
+            } else {
+                await interaction.editReply({
+                    content: '❌ An error occurred while processing your selection.',
+                    embeds: [],
+                    components: []
+                });
+            }
+        } catch (replyError) {
+            this.client.logger.error('Failed to send error message', replyError);
         }
     }
 }
