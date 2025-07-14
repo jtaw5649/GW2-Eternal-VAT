@@ -21,6 +21,8 @@ model ServerConfig {
   weeklyReportDay      Int      @default(0)
   weeklyReportHour     Int      @default(9)
   timezone             String   @default("UTC")
+  antiCheatEnabled     Boolean  @default(true)
+  minUsersInChannel    Int      @default(2)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
   
