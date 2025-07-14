@@ -1,22 +1,9 @@
-const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('devaudit')
         .setDescription('Developer: Audit voice activity for anomalous patterns')
-        .addStringOption(option =>
-            option.setName('guild')
-                .setDescription('Guild ID to check (leave empty for current guild)')
-                .setRequired(false))
-        .addIntegerOption(option =>
-            option.setName('days')
-                .setDescription('Number of days to analyze')
-                .setRequired(false)
-                .addChoices(
-                    { name: '7 days', value: 7 },
-                    { name: '14 days', value: 14 },
-                    { name: '30 days', value: 30 }
-                ))
         .setDMPermission(false),
     
     isDev: true,
@@ -31,138 +18,252 @@ module.exports = {
 
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         
-        const guildId = interaction.options.getString('guild') || interaction.guildId;
-        const days = interaction.options.getInteger('days') || 7;
+        const guilds = Array.from(client.guilds.cache.values())
+            .sort((a, b) => b.memberCount - a.memberCount)
+            .slice(0, 25);
         
-        const guild = client.guilds.cache.get(guildId);
-        if (!guild) {
-            return interaction.editReply('Guild not found.');
+        if (guilds.length === 0) {
+            return interaction.editReply('No servers found.');
         }
+
+        const options = guilds.map(guild => ({
+            label: guild.name.substring(0, 100),
+            description: `${guild.memberCount} members`,
+            value: guild.id
+        }));
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('devaudit_guild')
+                    .setPlaceholder('Select a server')
+                    .addOptions(options)
+            );
+
+        const embed = new EmbedBuilder()
+            .setTitle('🔍 Developer Audit Tool')
+            .setDescription('Select a server to audit for suspicious patterns')
+            .setColor(0xFF0088)
+            .setTimestamp();
+
+        await interaction.editReply({ 
+            embeds: [embed], 
+            components: [row] 
+        });
+    },
+
+    async handleSelectMenu(interaction, client) {
+        const [action, type, ...params] = interaction.customId.split('_');
         
-        const config = await client.configManager.getServerConfig(guildId);
-        if (!config) {
-            return interaction.editReply(`Guild "${guild.name}" is not configured.`);
+        if (action !== 'devaudit') return false;
+        
+        if (interaction.user.id !== process.env.DEVELOPER_ID) {
+            await interaction.reply({
+                content: '❌ Unauthorized',
+                flags: MessageFlags.Ephemeral
+            });
+            return true;
         }
         
         try {
-            const suspicious = await client.sessionManager.getSuspiciousUsers(guildId, days);
+            await interaction.deferUpdate();
             
-            if (suspicious.length === 0) {
-                const embed = new EmbedBuilder()
-                    .setTitle('🔍 No Suspicious Activity Detected')
-                    .setDescription(`No suspicious patterns found in **${guild.name}** over the last ${days} days.`)
-                    .setColor(0x00FF88)
-                    .setTimestamp()
-                    .addFields({
-                        name: '✅ Clean Report',
-                        value: 'All users appear to have normal voice activity patterns.'
+            if (type === 'guild') {
+                const selectedGuildId = interaction.values[0];
+                const selectedGuild = client.guilds.cache.get(selectedGuildId);
+                
+                if (!selectedGuild) {
+                    await interaction.editReply({ 
+                        content: 'Server not found.', 
+                        embeds: [], 
+                        components: [] 
                     });
-                    
-                return interaction.editReply({ embeds: [embed] });
-            }
-            
-            const embeds = [];
-            let currentEmbed = new EmbedBuilder()
-                .setTitle(`🚨 Suspicious Activity Report - ${guild.name}`)
-                .setDescription(`Found ${suspicious.length} users with suspicious patterns over ${days} days`)
-                .setColor(0xFF9900)
-                .setTimestamp();
-            
-            let fieldCount = 0;
-            
-            for (const user of suspicious) {
-                const flagList = user.flags.map(f => {
-                    const emoji = {
-                        'excessive_daily': '📅',
-                        'always_muted': '🔇',
-                        'excessive_average': '📊'
-                    }[f.type] || '⚠️';
-                    return `${emoji} ${f.detail}`;
-                }).join('\n');
+                    return true;
+                }
+
+                const daysRow = new ActionRowBuilder()
+                    .addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId(`devaudit_days_${selectedGuildId}`)
+                            .setPlaceholder('Select time period')
+                            .addOptions([
+                                { label: '7 days', value: '7' },
+                                { label: '14 days', value: '14' },
+                                { label: '30 days', value: '30' }
+                            ])
+                    );
+
+                const embed = new EmbedBuilder()
+                    .setTitle('🔍 Developer Audit Tool')
+                    .setDescription(`Server: **${selectedGuild.name}**\n\nSelect the time period to analyze`)
+                    .setColor(0xFF0088)
+                    .setTimestamp();
+
+                await interaction.editReply({ 
+                    embeds: [embed], 
+                    components: [daysRow] 
+                });
                 
-                const stats = `**Total Time:** ${this.formatDuration(user.stats.totalTime)}\n` +
-                             `**Sessions:** ${user.stats.sessionCount}\n` +
-                             `**Avg Muted:** ${user.stats.avgMutePercentage}%\n` +
-                             `**Avg Daily:** ${user.stats.avgDailyHours}h`;
+            } else if (type === 'days') {
+                const selectedGuildId = params[0];
+                const days = parseInt(interaction.values[0]);
+                const selectedGuild = client.guilds.cache.get(selectedGuildId);
                 
-                const fieldValue = `${flagList}\n\n${stats}`;
+                if (!selectedGuild) {
+                    await interaction.editReply({ 
+                        content: 'Server not found.', 
+                        embeds: [], 
+                        components: [] 
+                    });
+                    return true;
+                }
+
+                const config = await client.configManager.getServerConfig(selectedGuildId);
                 
-                if (fieldCount >= 20 || (currentEmbed.data.fields?.reduce((acc, f) => acc + f.name.length + f.value.length, 0) || 0) + fieldValue.length > 5500) {
-                    embeds.push(currentEmbed);
-                    currentEmbed = new EmbedBuilder()
-                        .setTitle(`🚨 Suspicious Activity (continued)`)
-                        .setColor(0xFF9900)
-                        .setTimestamp();
-                    fieldCount = 0;
+                if (!config) {
+                    await interaction.editReply({ 
+                        content: `Server "${selectedGuild.name}" is not configured.`, 
+                        embeds: [], 
+                        components: [] 
+                    });
+                    return true;
+                }
+
+                const suspicious = await client.sessionManager.getSuspiciousUsers(selectedGuildId, days);
+                
+                if (suspicious.length === 0) {
+                    const cleanEmbed = new EmbedBuilder()
+                        .setTitle('🔍 No Suspicious Activity Detected')
+                        .setDescription(`No suspicious patterns found in **${selectedGuild.name}** over the last ${days} days.`)
+                        .setColor(0x00FF88)
+                        .setTimestamp()
+                        .setThumbnail(selectedGuild.iconURL())
+                        .addFields({
+                            name: '✅ Clean Report',
+                            value: 'All users appear to have normal voice activity patterns.'
+                        });
+                        
+                    await interaction.editReply({ embeds: [cleanEmbed], components: [] });
+                    return true;
                 }
                 
-                currentEmbed.addFields({
-                    name: `${user.displayName} (${user.userId})`,
-                    value: fieldValue,
-                    inline: true
-                });
-                fieldCount++;
-            }
-            
-            if (fieldCount > 0) {
-                embeds.push(currentEmbed);
-            }
-            
-            const summaryEmbed = new EmbedBuilder()
-                .setTitle('📊 Summary')
-                .setColor(0x0099FF)
-                .setTimestamp()
-                .addFields(
-                    {
-                        name: 'Detection Criteria',
-                        value: '• 20+ hour days\n• 100% muted time\n• 16+ hour daily average',
-                        inline: true
-                    },
-                    {
-                        name: 'Anti-Cheat Status',
-                        value: config.antiCheatEnabled 
-                            ? `✅ Enabled\nMin Users: ${config.minUsersInChannel}` 
-                            : '❌ Disabled',
-                        inline: true
-                    },
-                    {
-                        name: 'Recommendation',
-                        value: suspicious.length > 5 
-                            ? '⚠️ High number of suspicious users detected. Consider investigating further.' 
-                            : '📋 Review individual cases for potential action.',
-                        inline: false
+                const embeds = [];
+                let currentEmbed = new EmbedBuilder()
+                    .setTitle(`🚨 Suspicious Activity Report - ${selectedGuild.name}`)
+                    .setDescription(`Found ${suspicious.length} users with suspicious patterns over ${days} days`)
+                    .setColor(0xFF9900)
+                    .setTimestamp()
+                    .setThumbnail(selectedGuild.iconURL());
+                
+                let fieldCount = 0;
+                
+                for (const user of suspicious) {
+                    const flagList = user.flags.map(f => {
+                        const emoji = {
+                            'excessive_daily': '📅',
+                            'always_muted': '🔇',
+                            'excessive_average': '📊'
+                        }[f.type] || '⚠️';
+                        return `${emoji} ${f.detail}`;
+                    }).join('\n');
+                    
+                    const stats = `**Total Time:** ${this.formatDuration(user.stats.totalTime)}\n` +
+                                 `**Sessions:** ${user.stats.sessionCount}\n` +
+                                 (user.stats.avgMutePercentage > 0 ? `**Avg Muted:** ${user.stats.avgMutePercentage}%\n` : '') +
+                                 `**Avg Daily:** ${user.stats.avgDailyHours}h`;
+                    
+                    const fieldValue = `${flagList}\n\n${stats}`;
+                    
+                    if (fieldCount >= 20 || (currentEmbed.data.fields?.reduce((acc, f) => acc + f.name.length + f.value.length, 0) || 0) + fieldValue.length > 5500) {
+                        embeds.push(currentEmbed);
+                        currentEmbed = new EmbedBuilder()
+                            .setTitle(`🚨 Suspicious Activity (continued)`)
+                            .setColor(0xFF9900)
+                            .setTimestamp();
+                        fieldCount = 0;
                     }
-                );
-            
-            embeds.push(summaryEmbed);
-            
-            await interaction.editReply({ embeds: embeds.slice(0, 10) });
-            
-            for (let i = 10; i < embeds.length; i += 10) {
-                await interaction.followUp({ 
-                    embeds: embeds.slice(i, i + 10), 
-                    flags: MessageFlags.Ephemeral 
-                });
+                    
+                    currentEmbed.addFields({
+                        name: `${user.displayName} (${user.userId})`,
+                        value: fieldValue,
+                        inline: true
+                    });
+                    fieldCount++;
+                }
+                
+                if (fieldCount > 0) {
+                    embeds.push(currentEmbed);
+                }
+                
+                const summaryEmbed = new EmbedBuilder()
+                    .setTitle('📊 Summary')
+                    .setColor(0x0099FF)
+                    .setTimestamp()
+                    .addFields(
+                        {
+                            name: 'Server Info',
+                            value: `**Name:** ${selectedGuild.name}\n**ID:** ${selectedGuildId}\n**Members:** ${selectedGuild.memberCount}`,
+                            inline: true
+                        },
+                        {
+                            name: 'Anti-Cheat Status',
+                            value: config.antiCheatEnabled 
+                                ? `✅ Enabled\nMin Users: ${config.minUsersInChannel}` 
+                                : '❌ Disabled',
+                            inline: true
+                        },
+                        {
+                            name: 'Detection Criteria',
+                            value: '• 20+ hour days\n• 100% muted time\n• 16+ hour daily average',
+                            inline: true
+                        },
+                        {
+                            name: 'Recommendation',
+                            value: suspicious.length > 5 
+                                ? '⚠️ High number of suspicious users detected. Consider investigating further.' 
+                                : '📋 Review individual cases for potential action.',
+                            inline: false
+                        }
+                    );
+                
+                embeds.push(summaryEmbed);
+                
+                await interaction.editReply({ embeds: embeds.slice(0, 10), components: [] });
+                
+                for (let i = 10; i < embeds.length; i += 10) {
+                    await interaction.followUp({ 
+                        embeds: embeds.slice(i, i + 10), 
+                        flags: MessageFlags.Ephemeral 
+                    });
+                }
             }
-            
         } catch (error) {
-            client.logger.error('Error generating suspicious activity report', error, {
-                guild: guild,
-                command: 'devsuspicious'
+            client.logger.error('Error in devaudit handleSelectMenu', error, {
+                guild: interaction.guild,
+                user: interaction.user,
+                command: 'devaudit',
+                type: type,
+                params: params
             });
             
-            const errorEmbed = new EmbedBuilder()
+            const embed = new EmbedBuilder()
                 .setTitle('❌ Error')
-                .setDescription('Failed to generate suspicious activity report.')
+                .setDescription('An unexpected error occurred.')
                 .setColor(0xFF0000)
                 .setTimestamp()
                 .addFields({
-                    name: 'Error Details',
+                    name: '🔧 Error Details',
                     value: `\`\`\`${error.message}\`\`\``
                 });
                 
-            await interaction.editReply({ embeds: [errorEmbed] });
+            try {
+                await interaction.editReply({ embeds: [embed], components: [] });
+            } catch (editError) {
+                client.logger.error('Failed to edit reply', editError);
+            }
         }
+        
+        return true;
     },
     
     formatDuration(ms) {
