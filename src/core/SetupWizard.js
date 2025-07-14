@@ -16,32 +16,48 @@ class SetupWizard {
         ];
         
         this.timezones = [
-            { label: 'UTC-12:00 (Baker Island)', value: 'UTC-12' },
-            { label: 'UTC-11:00 (American Samoa)', value: 'UTC-11' },
-            { label: 'UTC-10:00 (Hawaii)', value: 'UTC-10' },
-            { label: 'UTC-09:00 (Alaska)', value: 'UTC-9' },
-            { label: 'UTC-08:00 (Pacific Time)', value: 'UTC-8' },
-            { label: 'UTC-07:00 (Mountain Time)', value: 'UTC-7' },
-            { label: 'UTC-06:00 (Central Time)', value: 'UTC-6' },
-            { label: 'UTC-05:00 (Eastern Time)', value: 'UTC-5' },
-            { label: 'UTC-04:00 (Atlantic Time)', value: 'UTC-4' },
-            { label: 'UTC-03:00 (Argentina)', value: 'UTC-3' },
-            { label: 'UTC-02:00 (Mid-Atlantic)', value: 'UTC-2' },
-            { label: 'UTC-01:00 (Azores)', value: 'UTC-1' },
-            { label: 'UTC+00:00 (London)', value: 'UTC+0' },
-            { label: 'UTC+01:00 (Berlin)', value: 'UTC+1' },
-            { label: 'UTC+02:00 (Cairo)', value: 'UTC+2' },
-            { label: 'UTC+03:00 (Moscow)', value: 'UTC+3' },
-            { label: 'UTC+04:00 (Dubai)', value: 'UTC+4' },
-            { label: 'UTC+05:00 (Pakistan)', value: 'UTC+5' },
-            { label: 'UTC+05:30 (India)', value: 'UTC+5.5' },
-            { label: 'UTC+06:00 (Bangladesh)', value: 'UTC+6' },
-            { label: 'UTC+07:00 (Bangkok)', value: 'UTC+7' },
-            { label: 'UTC+08:00 (Singapore)', value: 'UTC+8' },
-            { label: 'UTC+09:00 (Tokyo)', value: 'UTC+9' },
-            { label: 'UTC+10:00 (Sydney)', value: 'UTC+10' },
-            { label: 'UTC+11:00 (Solomon Islands)', value: 'UTC+11' },
-            { label: 'UTC+12:00 (New Zealand)', value: 'UTC+12' }
+            // Americas
+            { label: 'UTC (Coordinated Universal Time)', value: 'UTC' },
+            { label: 'US/Eastern - New York, Miami', value: 'America/New_York' },
+            { label: 'US/Central - Chicago, Houston', value: 'America/Chicago' },
+            { label: 'US/Mountain - Denver, Phoenix', value: 'America/Denver' },
+            { label: 'US/Pacific - Los Angeles, Seattle', value: 'America/Los_Angeles' },
+            { label: 'US/Alaska - Anchorage', value: 'America/Anchorage' },
+            { label: 'US/Hawaii - Honolulu', value: 'Pacific/Honolulu' },
+            { label: 'Canada/Atlantic - Halifax', value: 'America/Halifax' },
+            { label: 'Canada/Eastern - Toronto', value: 'America/Toronto' },
+            { label: 'Mexico/Central - Mexico City', value: 'America/Mexico_City' },
+            { label: 'Brazil/Brasilia', value: 'America/Sao_Paulo' },
+            { label: 'Argentina - Buenos Aires', value: 'America/Argentina/Buenos_Aires' },
+            // Europe
+            { label: 'Europe/London', value: 'Europe/London' },
+            { label: 'Europe/Berlin, Paris, Rome', value: 'Europe/Berlin' },
+            { label: 'Europe/Athens, Helsinki', value: 'Europe/Athens' },
+            { label: 'Europe/Moscow', value: 'Europe/Moscow' },
+            { label: 'Europe/Stockholm', value: 'Europe/Stockholm' },
+            { label: 'Europe/Oslo', value: 'Europe/Oslo' },
+            { label: 'Europe/Copenhagen', value: 'Europe/Copenhagen' },
+            { label: 'Europe/Belgrade', value: 'Europe/Belgrade' },
+            // Asia
+            { label: 'Asia/Dubai', value: 'Asia/Dubai' },
+            { label: 'Asia/Karachi', value: 'Asia/Karachi' },
+            { label: 'Asia/Kolkata (India)', value: 'Asia/Kolkata' },
+            { label: 'Asia/Dhaka', value: 'Asia/Dhaka' },
+            { label: 'Asia/Bangkok', value: 'Asia/Bangkok' },
+            { label: 'Asia/Singapore', value: 'Asia/Singapore' },
+            { label: 'Asia/Hong_Kong', value: 'Asia/Hong_Kong' },
+            { label: 'Asia/Shanghai, Beijing', value: 'Asia/Shanghai' },
+            { label: 'Asia/Tokyo', value: 'Asia/Tokyo' },
+            { label: 'Asia/Seoul', value: 'Asia/Seoul' },
+            // Pacific
+            { label: 'Australia/Sydney', value: 'Australia/Sydney' },
+            { label: 'Australia/Melbourne', value: 'Australia/Melbourne' },
+            { label: 'Australia/Perth', value: 'Australia/Perth' },
+            { label: 'Pacific/Auckland', value: 'Pacific/Auckland' },
+            // Africa
+            { label: 'Africa/Cairo', value: 'Africa/Cairo' },
+            { label: 'Africa/Johannesburg', value: 'Africa/Johannesburg' },
+            { label: 'Africa/Lagos', value: 'Africa/Lagos' }
         ];
         
         this.timezonePages = [];
@@ -465,13 +481,11 @@ class SetupWizard {
                 new ButtonBuilder()
                     .setCustomId(`setup_weekly_enable_${interaction.guildId}`)
                     .setLabel('Enable Weekly Reports')
-                    .setStyle(ButtonStyle.Success)
-                    .setEmoji('✅'),
+                    .setStyle(ButtonStyle.Success),
                 new ButtonBuilder()
                     .setCustomId(`setup_weekly_disable_${interaction.guildId}`)
                     .setLabel('Disable Weekly Reports')
                     .setStyle(ButtonStyle.Danger)
-                    .setEmoji('❌')
             );
         
         const buttonRow = new ActionRowBuilder()
@@ -514,14 +528,16 @@ class SetupWizard {
         
         const embed = new EmbedBuilder()
             .setTitle('Step 7: Server Timezone')
-            .setDescription('Select your server\'s timezone for accurate report scheduling.')
+            .setDescription('Select your server\'s timezone for accurate report scheduling.\n\n' +
+                '**Note:** These timezones automatically handle daylight saving time changes.')
             .setColor(0x0099FF)
             .setFooter({ text: `Step 7 of 8 • Page ${state.timezonePage + 1}/${this.timezonePages.length}` });
         
         const currentTime = new Date().toLocaleTimeString('en-US', { 
             timeZone: 'UTC',
             hour: '2-digit',
-            minute: '2-digit'
+            minute: '2-digit',
+            hour12: true
         });
         embed.addFields({ name: 'Current UTC Time', value: currentTime });
         
