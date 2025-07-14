@@ -51,6 +51,48 @@ class CommandHandler {
                 await this.client.setupWizard.handleInteraction(interaction);
                 return;
             }
+            
+            if (interaction.isStringSelectMenu() && interaction.customId.startsWith('devbackup_')) {
+                const devbackupCommand = this.devCommands.get('devbackup');
+                if (devbackupCommand && devbackupCommand.handleSelectMenu) {
+                    try {
+                        await devbackupCommand.handleSelectMenu(interaction, this.client);
+                    } catch (error) {
+                        this.client.logger.error('Error in devbackup handleSelectMenu', error, {
+                            guild: interaction.guild,
+                            user: interaction.user,
+                            command: 'devbackup',
+                            customId: interaction.customId
+                        });
+                        
+                        try {
+                            if (!interaction.replied && !interaction.deferred) {
+                                await interaction.reply({
+                                    content: '❌ An error occurred while processing your selection.',
+                                    flags: MessageFlags.Ephemeral
+                                });
+                            } else {
+                                await interaction.editReply({
+                                    content: '❌ An error occurred while processing your selection.',
+                                    embeds: [],
+                                    components: []
+                                });
+                            }
+                        } catch (replyError) {
+                            this.client.logger.error('Failed to send error message', replyError, {
+                                guild: interaction.guild,
+                                user: interaction.user
+                            });
+                        }
+                    }
+                } else {
+                    this.client.logger.warn('devbackup command not found or missing handleSelectMenu method', {
+                        hasCommand: !!devbackupCommand,
+                        hasMethod: !!(devbackupCommand && devbackupCommand.handleSelectMenu)
+                    });
+                }
+                return;
+            }
         }
         
         if (!interaction.isChatInputCommand()) return;

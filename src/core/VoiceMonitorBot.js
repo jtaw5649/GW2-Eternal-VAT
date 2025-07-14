@@ -245,33 +245,34 @@ class VoiceMonitorBot {
     }
 
     async updateCommandPermissions(guild, commandRole) {
-        const everyoneRole = guild.roles.everyone;
-        const uniquePermissions = commandRole.permissions.toArray().filter(
-            perm => !everyoneRole.permissions.has(perm)
-        );
-        
-        const targetPermission = uniquePermissions[0] || PermissionFlagsBits.ManageMessages;
-        
-        this.logger.info(`Updating command visibility to require: ${targetPermission}`, { guild });
-        
-        let commands;
-        if (guild.id === process.env.DEV_SERVER_ID) {
-            commands = [
-                ...Array.from(this.commandHandler.commands.values()),
-                ...Array.from(this.commandHandler.devCommands.values())
-            ];
-        } else {
-            commands = Array.from(this.commandHandler.commands.values());
-        }
-        
-        for (const command of commands) {
-            if (command.data.name !== 'setup' && !command.isDev) {
-                command.data.setDefaultMemberPermissions(PermissionFlagsBits[targetPermission] || targetPermission);
+        try {
+            const targetPermission = PermissionFlagsBits.ManageMessages;
+            
+            this.logger.info(`Setting command permissions for role: ${commandRole.name}`, { guild });
+            
+            let commands;
+            if (guild.id === process.env.DEV_SERVER_ID) {
+                commands = [
+                    ...Array.from(this.commandHandler.commands.values()),
+                    ...Array.from(this.commandHandler.devCommands.values())
+                ];
+            } else {
+                commands = Array.from(this.commandHandler.commands.values());
             }
+            
+            const commandData = commands.map(cmd => {
+                const data = cmd.data;
+                if (data.name !== 'setup' && !cmd.isDev) {
+                    data.setDefaultMemberPermissions(targetPermission);
+                }
+                return data;
+            });
+            
+            await guild.commands.set(commandData);
+            this.logger.info(`Command permissions updated successfully`, { guild });
+        } catch (error) {
+            this.logger.error(`Failed to update command permissions`, error, { guild });
         }
-        
-        await guild.commands.set(commands.map(cmd => cmd.data));
-        this.logger.info(`Updated command permissions`, { guild });
     }
 
     scheduleWeeklyReport(guildId, config) {

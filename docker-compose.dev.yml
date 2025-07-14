@@ -69,6 +69,7 @@ services:
       - ./prisma:/app/prisma
       - ./data:/data
       - ./logs:/logs
+      - ./backups:/backups
     command: npx nodemon src/bot.js
     networks:
       - bot-network

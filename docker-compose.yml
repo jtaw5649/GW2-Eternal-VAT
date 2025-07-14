@@ -92,6 +92,7 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - ./data:/data
       - ./logs:/logs
+      - ./backups:/backups
     command: ${BOT_COMMAND:-node src/bot.js}
     logging:
       driver: "json-file"
