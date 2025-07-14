@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ServerConfig {
+  id                   String   @id @default(cuid())
+  guildId              String   @unique
+  trackingRoleName     String   @default("Voice Active")
+  commandRoleId        String?
+  reportChannelId      String?
+  reportRecipients     String[] @default([])
+  excludedChannelIds   String[] @default([])
+  minSessionMinutes    Int      @default(20)
+  rejoinWindowMinutes  Int      @default(20)
+  weeklyReportEnabled  Boolean  @default(true)
+  weeklyReportDay      Int      @default(0)
+  weeklyReportHour     Int      @default(9)
+  timezone             String   @default("UTC")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  
+  @@index([guildId])
+}
+
+model VoiceSession {
+  id           String   @id @default(cuid())
+  guildId      String
+  userId       String
+  displayName  String
+  startTime    DateTime
+  endTime      DateTime?
+  totalTime    BigInt
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  @@index([guildId, userId])
+  @@index([guildId, isActive])
+  @@index([guildId, endTime])
+}
+
+model ReportLog {
+  id           String   @id @default(cuid())
+  guildId      String
+  reportType   String
+  days         Int
+  generatedBy  String?
+  sentTo       String[]
+  success      Boolean
+  error        String?
+  createdAt    DateTime @default(now())
+  
+  @@index([guildId, createdAt])
+}
