@@ -82,42 +82,42 @@ class SetupWizard {
         const state = JSON.parse(stateData);
         
         switch (params[0]) {
-            case 'start':
-                await this.showTrackingRole(interaction, state);
-                break;
-            case 'cancel':
-                await this.cancelSetup(interaction, setupKey);
-                break;
-            case 'back':
-                await this.goBack(interaction, state);
-                break;
-            case 'role':
-                await this.handleRoleSelection(interaction, state);
-                break;
-            case 'recipients':
-                await this.handleRecipientSelection(interaction, state);
-                break;
-            case 'permissions':
-                await this.handlePermissionSelection(interaction, state);
-                break;
-            case 'excluded':
-                await this.handleExcludedChannels(interaction, state);
-                break;
-            case 'session':
-                await this.handleSessionSettings(interaction, state);
-                break;
-            case 'anticheat':
-                await this.handleAntiCheat(interaction, state);
-                break;
-            case 'weekly':
-                await this.handleWeeklyReports(interaction, state);
-                break;
-            case 'timezone':
-                await this.handleTimezone(interaction, state);
-                break;
-            case 'confirm':
-                await this.confirmSetup(interaction, state);
-                break;
+        case 'start':
+            await this.showTrackingRole(interaction, state);
+            break;
+        case 'cancel':
+            await this.cancelSetup(interaction, setupKey);
+            break;
+        case 'back':
+            await this.goBack(interaction, state);
+            break;
+        case 'role':
+            await this.handleRoleSelection(interaction, state);
+            break;
+        case 'recipients':
+            await this.handleRecipientSelection(interaction, state);
+            break;
+        case 'permissions':
+            await this.handlePermissionSelection(interaction, state);
+            break;
+        case 'excluded':
+            await this.handleExcludedChannels(interaction, state);
+            break;
+        case 'session':
+            await this.handleSessionSettings(interaction, state);
+            break;
+        case 'anticheat':
+            await this.handleAntiCheat(interaction, state);
+            break;
+        case 'weekly':
+            await this.handleWeeklyReports(interaction, state);
+            break;
+        case 'timezone':
+            await this.handleTimezone(interaction, state);
+            break;
+        case 'confirm':
+            await this.confirmSetup(interaction, state);
+            break;
         }
         
         return true;

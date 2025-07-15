@@ -1,0 +1,150 @@
+variables:
+  NODE_VERSION: "22-alpine"
+  POSTGRES_DB: gw2_eternal_vat_test
+  POSTGRES_USER: test_user
+  POSTGRES_PASSWORD: test_pass
+
+stages:
+  - lint
+  - test
+  - version
+  - notify
+
+.npm_cache:
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+
+lint:
+  stage: lint
+  image: node:${NODE_VERSION}
+  extends: .npm_cache
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --no-frozen-lockfile
+    - pnpm run lint
+  only:
+    - merge_requests
+    - main
+    - dev
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}
+  extends: .npm_cache
+  services:
+    - redis:7-alpine
+    - postgres:17-alpine
+  variables:
+    DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+    REDIS_URL: "redis://redis:6379"
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --no-frozen-lockfile
+    - pnpm run prisma:generate
+    - pnpm run test:unit
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: coverage/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - main
+    - dev
+
+test:integration:
+  stage: test
+  image: node:${NODE_VERSION}
+  extends: .npm_cache
+  services:
+    - redis:7-alpine
+    - postgres:17-alpine
+  variables:
+    DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+    REDIS_URL: "redis://redis:6379"
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --no-frozen-lockfile
+    - pnpm run prisma:generate
+    - pnpm run prisma:deploy
+    - pnpm run test:integration
+  only:
+    - merge_requests
+    - main
+    - dev
+
+security:scan:
+  stage: test
+  image: node:${NODE_VERSION}
+  extends: .npm_cache
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --no-frozen-lockfile
+    - pnpm audit --audit-level=high
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+    - dev
+
+version:bump:
+  stage: version
+  image: node:${NODE_VERSION}
+  before_script:
+    - apk add --no-cache git
+    - git config user.email "ci@gitlab.com"
+    - git config user.name "GitLab CI"
+    - git remote set-url origin https://oauth2:${CI_PUSH_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git
+  script:
+    - npm version patch --no-git-tag-version
+    - git add package.json
+    - git commit -m "Bump version to $(node -p "require('./package.json').version") [skip ci]"
+    - git push origin HEAD:${CI_COMMIT_REF_NAME}
+  only:
+    - dev
+  except:
+    variables:
+      - $CI_COMMIT_MESSAGE =~ /skip ci/
+
+notify:success:
+  stage: notify
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      if [ "$CI_COMMIT_REF_NAME" = "main" ]; then
+        curl -X POST "$DISCORD_WEBHOOK_URL" \
+          -H "Content-Type: application/json" \
+          -d '{
+            "embeds": [{
+              "title": "✅ Tests Passed",
+              "description": "All tests passed for main branch. Code is ready to deploy.",
+              "color": 65280,
+              "fields": [
+                {"name": "Branch", "value": "main", "inline": true},
+                {"name": "Commit", "value": "'${CI_COMMIT_SHORT_SHA}'", "inline": true},
+                {"name": "Author", "value": "'${CI_COMMIT_AUTHOR}'", "inline": false},
+                {"name": "Message", "value": "'${CI_COMMIT_MESSAGE}'", "inline": false}
+              ]
+            }]
+          }'
+      fi
+  only:
+    - main
+  when: on_success
+  allow_failure: true
