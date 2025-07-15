@@ -33,6 +33,7 @@ prometheus/
 
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
 
 .last-update
 .gitlab-ci-vars
