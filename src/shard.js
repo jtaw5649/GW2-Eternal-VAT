@@ -87,7 +87,7 @@ setInterval(async () => {
 async function shutdown() {
     console.log('[ShardManager] Shutting down');
     
-    await manager.broadcastEval(client => process.exit(0));
+    await manager.broadcastEval(_client => process.exit(0));
     
     setTimeout(() => {
         redis.disconnect();

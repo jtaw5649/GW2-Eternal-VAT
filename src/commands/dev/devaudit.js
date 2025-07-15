@@ -177,7 +177,7 @@ module.exports = {
                     if (fieldCount >= 20 || (currentEmbed.data.fields?.reduce((acc, f) => acc + f.name.length + f.value.length, 0) || 0) + fieldValue.length > 5500) {
                         embeds.push(currentEmbed);
                         currentEmbed = new EmbedBuilder()
-                            .setTitle(`🚨 Suspicious Activity (continued)`)
+                            .setTitle('🚨 Suspicious Activity (continued)')
                             .setColor(0xFF9900)
                             .setTimestamp();
                         fieldCount = 0;

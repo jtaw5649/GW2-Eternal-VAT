@@ -261,7 +261,7 @@ class BackupHandler {
                             break;
                         }
                     }
-                } catch (err) {
+                } catch (_error) {
                     continue;
                 }
             }
@@ -349,7 +349,7 @@ class BackupHandler {
 
             const config = await this.client.configManager.getServerConfig(guildId);
             if (config) {
-                const { id, createdAt, updatedAt, prefix, ...configData } = config;
+                const { _id, _createdAt, _updatedAt, _prefix, ...configData } = config;
                 data.config = configData;
             }
 

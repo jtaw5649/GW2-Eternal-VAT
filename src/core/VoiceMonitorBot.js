@@ -114,7 +114,7 @@ class VoiceMonitorBot {
         
         await this.commandHandler.loadCommands();
         
-        for (const [guildId, guild] of this.client.guilds.cache) {
+        for (const [guild] of this.client.guilds.cache) {
             await this.setupGuild(guild);
         }
         
@@ -123,7 +123,7 @@ class VoiceMonitorBot {
         this.backupHandler.startBackupSchedule();
         
         setInterval(async () => {
-            const activeSessionCount = await this.redis.keys(`voice:*:active:*`);
+            const activeSessionCount = await this.redis.keys('voice:*:active:*');
             if (activeSessionCount.length > 0) {
                 this.logger.debug(`Active voice sessions: ${activeSessionCount.length}`);
             }
@@ -271,9 +271,9 @@ class VoiceMonitorBot {
             });
             
             await guild.commands.set(commandData);
-            this.logger.info(`Command permissions updated successfully`, { guild });
+            this.logger.info('Command permissions updated successfully', { guild });
         } catch (error) {
-            this.logger.error(`Failed to update command permissions`, error, { guild });
+            this.logger.error('Failed to update command permissions', error, { guild });
         }
     }
 
@@ -413,7 +413,7 @@ class VoiceMonitorBot {
     async syncAllGuilds() {
         this.logger.info('Syncing voice states across all guilds');
         
-        for (const [guildId, guild] of this.client.guilds.cache) {
+        for (const [guild] of this.client.guilds.cache) {
             await this.syncGuildVoiceStates(guild);
         }
     }
@@ -504,7 +504,7 @@ class VoiceMonitorBot {
                 }
             }
         } catch (error) {
-            this.logger.error(`Error syncing voice states`, error, { guild });
+            this.logger.error('Error syncing voice states', error, { guild });
         }
     }
 
@@ -680,8 +680,8 @@ class VoiceMonitorBot {
             embed.addFields({
                 name: '🛡️ Anti-Cheat Status',
                 value: `**Min Users Required:** ${config.minUsersInChannel || 2}\n` +
-                       `**Deafened Detection:** Enabled\n` +
-                       `**Mute Tracking:** Enabled`,
+                       '**Deafened Detection:** Enabled\n' +
+                       '**Mute Tracking:** Enabled',
                 inline: false
             });
         }

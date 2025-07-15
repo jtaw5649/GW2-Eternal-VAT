@@ -88,7 +88,7 @@ module.exports = {
                     );
                     
                 await interaction.editReply({ embeds: [embed] });
-            } catch (error) {
+            } catch (_error) {
                 const embed = new EmbedBuilder()
                     .setTitle('❌ Backup Failed')
                     .setDescription('An error occurred during the backup process.')
@@ -146,7 +146,7 @@ module.exports = {
                     );
                 
                 await interaction.editReply({ embeds: [embed], components: [row] });
-            } catch (error) {
+            } catch (_error) {
                 const embed = new EmbedBuilder()
                     .setTitle('❌ Error')
                     .setDescription('Failed to retrieve backup list.')
@@ -213,7 +213,7 @@ module.exports = {
                         
                     await interaction.editReply({ embeds: [embed] });
                 }
-            } catch (error) {
+            } catch (_error) {
                 const embed = new EmbedBuilder()
                     .setTitle('❌ Processing Error')
                     .setDescription('Failed to process the backup file.')
@@ -252,7 +252,7 @@ module.exports = {
                 if (backups.length === 0) {
                     const embed = new EmbedBuilder()
                         .setTitle('📁 No Backups Found')
-                        .setDescription(`No backup files found for the selected server.`)
+                        .setDescription('No backup files found for the selected server.')
                         .setColor(0xFF9900)
                         .setTimestamp()
                         .addFields({
@@ -344,7 +344,7 @@ module.exports = {
                     await interaction.editReply({ embeds: [embed], components: [] });
                 }
             }
-        } catch (error) {
+        } catch (_error) {
             client.logger.error('Error in devbackup handleSelectMenu', error, {
                 guild: interaction.guild,
                 user: interaction.user,

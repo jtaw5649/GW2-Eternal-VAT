@@ -145,7 +145,7 @@ class CommandHandler {
         }
     }
 
-    async handleInteractionError(interaction, error) {
+    async handleInteractionError(interaction, _error) {
         try {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({

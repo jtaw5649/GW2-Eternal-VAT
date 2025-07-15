@@ -29,10 +29,10 @@ module.exports = {
             .setTimestamp();
         
         const response = await interaction.reply({ 
-                    embeds: [embed], 
-                    components: [row], 
-                    flags: MessageFlags.Ephemeral 
-                });
+            embeds: [embed], 
+            components: [row], 
+            flags: MessageFlags.Ephemeral 
+        });
         
         try {
             const confirmation = await response.awaitMessageComponent({ 
@@ -44,7 +44,7 @@ module.exports = {
             } else if (confirmation.customId === 'config_reset') {
                 await this.resetConfig(confirmation, client);
             }
-        } catch (e) {
+        } catch (_e) {
             const timeoutEmbed = new EmbedBuilder()
                 .setTitle('⏱️ Menu Timed Out')
                 .setDescription('Configuration menu timed out.')
@@ -225,7 +225,7 @@ module.exports = {
                     components: [] 
                 });
             }
-        } catch (e) {
+        } catch (_e) {
             const timeoutEmbed = new EmbedBuilder()
                 .setTitle('⏱️ Reset Timed Out')
                 .setDescription('Configuration reset timed out.')
