@@ -36,3 +36,6 @@ yarn.lock
 
 .last-update
 .gitlab-ci-vars
+
+eaDir/
+SynoEAStream
