@@ -1,5 +1,5 @@
 const { createTestInteraction } = require('../../setup');
-const setupCommand = require('../../../backup/setup');
+const setupCommand = require('../../../src/commands/setup');
 
 describe('Setup Command', () => {
     let interaction;

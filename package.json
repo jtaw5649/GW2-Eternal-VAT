@@ -1,6 +1,6 @@
 {
   "name": "gw2-eternal-vat",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "GW2 Eternal voice activity tracking bot",
   "main": "src/bot.js",
   "license": "UNLICENSED",
