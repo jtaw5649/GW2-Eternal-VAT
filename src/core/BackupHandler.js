@@ -1,4 +1,4 @@
-const { WebhookClient, AttachmentBuilder } = require('discord.js');
+const { WebhookClient } = require('discord.js');
 const cron = require('node-cron');
 const fs = require('fs').promises;
 const path = require('path');
@@ -155,7 +155,6 @@ class BackupHandler {
                 const existing = JSON.parse(existingInfo);
                 guildInfo.createdAt = existing.createdAt;
             } catch {
-                // File doesn't exist, use new createdAt
             }
             
             guildInfo.lastBackup = date;
