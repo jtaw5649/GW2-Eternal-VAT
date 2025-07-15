@@ -1,0 +1,265 @@
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+  NODE_VERSION: "22-alpine"
+  POSTGRES_DB: gw2_eternal_vat_test
+  POSTGRES_USER: test_user
+  POSTGRES_PASSWORD: test_pass
+  REDIS_IMAGE: redis:7-alpine
+  POSTGRES_IMAGE: postgres:17-alpine
+
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+before_script:
+  - echo "Pipeline started for $CI_COMMIT_REF_NAME"
+
+lint:
+  stage: lint
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm run lint
+  only:
+    - merge_requests
+    - main
+    - develop
+
+test:unit:
+  stage: test
+  image: node:${NODE_VERSION}
+  services:
+    - name: ${REDIS_IMAGE}
+      alias: redis
+    - name: ${POSTGRES_IMAGE}
+      alias: postgres
+  variables:
+    DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+    REDIS_URL: "redis://redis:6379"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+    - apk add --no-cache postgresql-client
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm run prisma:generate
+    - pnpm run test:unit
+  coverage: '/Lines\s*:\s*(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      junit: coverage/junit.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 1 week
+  only:
+    - merge_requests
+    - main
+    - develop
+
+test:integration:
+  stage: test
+  image: node:${NODE_VERSION}
+  services:
+    - name: ${REDIS_IMAGE}
+      alias: redis
+    - name: ${POSTGRES_IMAGE}
+      alias: postgres
+  variables:
+    DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+    REDIS_URL: "redis://redis:6379"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+    - apk add --no-cache postgresql-client
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm run prisma:generate
+    - pnpm run prisma:deploy
+    - pnpm run test:integration
+  only:
+    - merge_requests
+    - main
+    - develop
+
+test:e2e:
+  stage: test
+  image: node:${NODE_VERSION}
+  services:
+    - name: ${REDIS_IMAGE}
+      alias: redis
+    - name: ${POSTGRES_IMAGE}
+      alias: postgres
+  variables:
+    DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+    REDIS_URL: "redis://redis:6379"
+    DISCORD_TOKEN: "test-token"
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+    - apk add --no-cache postgresql-client
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm run prisma:generate
+    - pnpm run prisma:deploy
+    - pnpm run test:e2e
+  only:
+    - merge_requests
+    - main
+    - develop
+
+build:docker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG-$CI_COMMIT_SHORT_SHA
+    LATEST_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG-latest
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_TAG -t $LATEST_TAG .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+    - echo "IMAGE_TAG=$IMAGE_TAG" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  only:
+    - main
+    - develop
+    - tags
+
+build:docker:release:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    LATEST_TAG: $CI_REGISTRY_IMAGE:latest
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $IMAGE_TAG -t $LATEST_TAG .
+    - docker push $IMAGE_TAG
+    - docker push $LATEST_TAG
+  only:
+    - tags
+
+deploy:staging:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - build:docker
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$STAGING_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $STAGING_SERVER >> ~/.ssh/known_hosts
+  script:
+    - |
+      ssh $STAGING_USER@$STAGING_SERVER << EOF
+        cd /opt/gw2-eternal-vat
+        docker-compose pull
+        docker-compose up -d
+        docker system prune -f
+      EOF
+  environment:
+    name: staging
+    url: https://staging.gw2-eternal-vat.example.com
+  only:
+    - develop
+  when: manual
+
+deploy:production:
+  stage: deploy
+  image: alpine:latest
+  dependencies:
+    - build:docker
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$PRODUCTION_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $PRODUCTION_SERVER >> ~/.ssh/known_hosts
+  script:
+    - |
+      ssh $PRODUCTION_USER@$PRODUCTION_SERVER << EOF
+        cd /opt/gw2-eternal-vat
+        docker-compose pull
+        docker-compose up -d
+        docker system prune -f
+      EOF
+  environment:
+    name: production
+    url: https://gw2-eternal-vat.example.com
+  only:
+    - main
+    - tags
+  when: manual
+
+security:scan:
+  stage: test
+  image: node:${NODE_VERSION}
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-npm
+    paths:
+      - node_modules/
+      - .pnpm-store/
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.13.1 --activate
+  script:
+    - pnpm install --frozen-lockfile
+    - pnpm audit --audit-level=high
+  allow_failure: true
+  only:
+    - merge_requests
+    - main
+    - develop
+
+pages:
+  stage: deploy
+  dependencies:
+    - test:unit
+  script:
+    - mkdir -p public
+    - cp -r coverage/* public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - main

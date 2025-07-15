@@ -1,0 +1,45 @@
+{
+  "name": "gw2-eternal-vat",
+  "version": "0.1.5",
+  "description": "GW2 Eternal voice activity tracking bot",
+  "main": "src/bot.js",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "node src/bot.js",
+    "shard": "node src/shard.js",
+    "dev": "nodemon src/bot.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "migrate:legacy": "node src/migrate.js",
+    "test": "jest --silent --no-coverage",
+    "test:verbose": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest tests/unit --silent",
+    "test:integration": "jest tests/integration --silent",
+    "test:e2e": "jest tests/e2e --silent",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.11.1",
+    "discord.js": "^14.21.0",
+    "ioredis": "^5.6.1",
+    "node-cron": "^4.2.1",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.31.0",
+    "ioredis-mock": "^8.9.0",
+    "jest": "^30.0.4",
+    "nodemon": "^3.1.9",
+    "prisma": "^6.11.1"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@10.13.1"
+}

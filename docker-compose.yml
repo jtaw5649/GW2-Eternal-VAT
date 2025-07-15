@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: gw2-eternal-vat-redis
+    restart: always
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1
+      --save 300 10
+      --save 900 100
+      --maxclients 1000
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: gw2-eternal-vat-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: gw2_eternal_vat
+      POSTGRES_USER: ${POSTGRES_USER:-gw2_eternal_vat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gw2_eternal_vat}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  discord-bot:
+    build:
+      context: .
+    container_name: gw2-eternal-vat-bot
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      NODE_ENV: ${NODE_ENV:-production}
+      USE_SHARDING: ${USE_SHARDING:-false}
+      TOTAL_SHARDS: ${TOTAL_SHARDS:-auto}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      DEFAULT_PREFIX: ${DEFAULT_PREFIX:-!}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ENABLE_METRICS: ${ENABLE_METRICS:-true}
+      METRICS_PORT: 9090
+      DEVELOPER_ID: ${DEVELOPER_ID}
+      DEV_SERVER_ID: ${DEV_SERVER_ID}
+      LOG_WEBHOOK_URL: ${LOG_WEBHOOK_URL}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./data:/data
+      - ./logs:/logs
+      - ./backups:/backups
+    command: ${BOT_COMMAND:-node src/bot.js}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    deploy:
+      resources:
+        limits:
+          memory: ${BOT_MEMORY_LIMIT:-1G}
+        reservations:
+          memory: ${BOT_MEMORY_RESERVATION:-512M}
+    networks:
+      - bot-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
+    ports:
+      - "${METRICS_PORT:-9090}:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gw2-eternal-vat-grafana
+    restart: always
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    networks:
+      - bot-network
+    depends_on:
+      - discord-bot
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gw2-eternal-vat-prometheus
+    restart: always
+    profiles: ["monitoring"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "${PROMETHEUS_PORT:-9091}:9090"
+    networks:
+      - bot-network
+    depends_on:
+      - discord-bot
+
+networks:
+  bot-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  redis-data:
+  postgres-data:
+  grafana-data:
+  prometheus-data:

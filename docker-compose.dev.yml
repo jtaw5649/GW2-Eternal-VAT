@@ -1,0 +1,88 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: gw2-eternal-vat-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --appendonly yes
+      --save 60 1
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: gw2-eternal-vat-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gw2_eternal_vat
+      POSTGRES_USER: ${POSTGRES_USER:-gw2_eternal_vat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - bot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gw2_eternal_vat}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  bot-dev:
+    build:
+      context: .
+    container_name: gw2-eternal-vat-bot-dev
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      NODE_ENV: development
+      USE_SHARDING: ${USE_SHARDING:-false}
+      TOTAL_SHARDS: ${TOTAL_SHARDS:-auto}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      DEFAULT_PREFIX: ${DEFAULT_PREFIX:-!}
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+      ENABLE_METRICS: ${ENABLE_METRICS:-false}
+      DEVELOPER_ID: ${DEVELOPER_ID}
+      DEV_SERVER_ID: ${DEV_SERVER_ID}
+      LOG_WEBHOOK_URL: ${LOG_WEBHOOK_URL}
+      DELETE_DATA_ON_LEAVE: ${DELETE_DATA_ON_LEAVE:-false}
+    volumes:
+      - ./src:/app/src
+      - ./prisma:/app/prisma
+      - ./data:/data
+      - ./logs:/logs
+      - ./backups:/backups
+    command: npx nodemon src/bot.js
+    networks:
+      - bot-network
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+networks:
+  bot-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres-data:
