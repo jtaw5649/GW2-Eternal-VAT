@@ -140,7 +140,7 @@ notify:success:
                 {"name": "Commit", "value": "'${CI_COMMIT_SHORT_SHA}'", "inline": true},
                 {"name": "Author", "value": "'${CI_COMMIT_AUTHOR}'", "inline": false},
                 {"name": "Message", "value": "'${CI_COMMIT_MESSAGE}'", "inline": false}
-              ],
+              ]
             }]
           }'
       fi
