@@ -8,8 +8,9 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml* ./
 COPY prisma ./prisma/
+COPY scripts ./scripts/
 
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile || pnpm install
 RUN pnpm exec prisma generate
 RUN pnpm prune --prod
 
